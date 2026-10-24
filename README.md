@@ -14,16 +14,12 @@ A small project to run PostgreSQL on AWS in a way that is **monitored, backed up
 
 ## Architecture (planned)
 ```
-Internet
-   |
- [Security group: only my IP, port 5432]
-   |
- VPC -- private subnets (2 AZs)
-   |
- RDS PostgreSQL  --->  CloudWatch metrics + alarms --->  email notification
-   |
- Automated backups / snapshots --->  restore test
-```
+My laptop --SSH (my IP only)--> small test server (public subnet)
+                                        |
+                        port 5432 (only from the test server)
+                                        v
+                          PostgreSQL / RDS (private subnets)
+
 
 ## Plan
 - [ ] 1. VPC, subnets, security groups (CloudFormation)
