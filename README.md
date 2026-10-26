@@ -19,7 +19,7 @@ My laptop --SSH (my IP only)--> small test server (public subnet)
 ```
 
 ## Plan
-- [ ] 1. VPC, subnets, security groups (CloudFormation)
+- [X] 1. VPC, subnets, security groups (CloudFormation)
 - [ ] 2. RDS PostgreSQL instance
 - [ ] 3. CloudWatch metrics and alarms (CPU, storage, connections)
 - [ ] 4. Backups and snapshots
