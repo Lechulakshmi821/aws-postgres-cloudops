@@ -1,0 +1,120 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Week 3 - CloudWatch alarms and a dashboard for the RDS PostgreSQL instance,
+  with email alerts through SNS.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: pg-cloudops
+  AlertEmail:
+    Type: String
+    Description: Email address that receives the alarm notifications.
+  DbInstanceId:
+    Type: String
+    Default: pg-cloudops-postgres
+    Description: DBInstanceIdentifier of the RDS instance.
+
+Resources:
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${ProjectName}-alerts"
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref AlertEmail
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  CpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectName}-cpu-high"
+      AlarmDescription: CPU above 80 percent for 10 minutes
+      Namespace: AWS/RDS
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref DbInstanceId
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  StorageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectName}-storage-low"
+      AlarmDescription: Less than 5 GB of free storage
+      Namespace: AWS/RDS
+      MetricName: FreeStorageSpace
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref DbInstanceId
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5368709120
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  ConnectionsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectName}-connections-high"
+      AlarmDescription: More than 50 database connections
+      Namespace: AWS/RDS
+      MetricName: DatabaseConnections
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref DbInstanceId
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 50
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  MemoryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectName}-memory-low"
+      AlarmDescription: Less than 100 MB of freeable memory
+      Namespace: AWS/RDS
+      MetricName: FreeableMemory
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref DbInstanceId
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 104857600
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+
+  Dashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "${ProjectName}-postgres"
+      DashboardBody: !Sub |
+        {"widgets":[
+          {"type":"metric","x":0,"y":0,"width":12,"height":6,"properties":{"title":"CPU utilization (%)","region":"${AWS::Region}","stat":"Average","period":300,"metrics":[["AWS/RDS","CPUUtilization","DBInstanceIdentifier","${DbInstanceId}"]]}},
+          {"type":"metric","x":12,"y":0,"width":12,"height":6,"properties":{"title":"Database connections","region":"${AWS::Region}","stat":"Average","period":300,"metrics":[["AWS/RDS","DatabaseConnections","DBInstanceIdentifier","${DbInstanceId}"]]}},
+          {"type":"metric","x":0,"y":6,"width":12,"height":6,"properties":{"title":"Free storage (bytes)","region":"${AWS::Region}","stat":"Average","period":300,"metrics":[["AWS/RDS","FreeStorageSpace","DBInstanceIdentifier","${DbInstanceId}"]]}},
+          {"type":"metric","x":12,"y":6,"width":12,"height":6,"properties":{"title":"Freeable memory (bytes)","region":"${AWS::Region}","stat":"Average","period":300,"metrics":[["AWS/RDS","FreeableMemory","DBInstanceIdentifier","${DbInstanceId}"]]}}
+        ]}
+
+Outputs:
+  AlertTopicArn:
+    Value: !Ref AlertTopic
