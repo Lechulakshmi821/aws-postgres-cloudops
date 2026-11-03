@@ -46,7 +46,7 @@ docs/               notes, screenshots and test results
 | 2 | Test client with Session Manager (no open SSH) | done |
 | 3 | RDS PostgreSQL 17 in private subnets | done |
 | 4 | Connection test over TLS, SSL-enforcement test | done |
-| 5 | CloudWatch alarms, dashboard, email alerts | template ready, deploy next |
+| 5 | CloudWatch alarms, dashboard, email alerts (SNS) | done |
 | 6 | Backups and snapshots | planned |
 | 7 | Restore test with timing | planned |
 | 8 | Least-privilege database user, CloudTrail | planned |
@@ -66,6 +66,30 @@ docs/               notes, screenshots and test results
 - Connected from the client with `psql` over TLS 1.3; `SHOW ssl;` returned `on`.
 - Connection with `sslmode=disable` was **refused** by the server ("no pg_hba.conf entry ... no encryption"), which shows SSL is enforced.
 - Created a table `customers` with 3 rows, to be used later in the restore test.
+- Forced the CPU alarm into the ALARM state with `aws cloudwatch set-alarm-state`; the alert email from SNS arrived, so the whole chain works (CloudWatch alarm, SNS, email).
+
+## Monitoring
+
+`monitoring.yaml` creates an SNS topic with an email subscription, four CloudWatch alarms and a dashboard for the RDS instance:
+
+| Alarm | Fires when |
+|-------|-----------|
+| `pg-cloudops-cpu-high` | CPU above 80 % for 10 minutes |
+| `pg-cloudops-storage-low` | less than 5 GB free storage |
+| `pg-cloudops-connections-high` | more than 50 connections |
+| `pg-cloudops-memory-low` | less than 100 MB freeable memory |
+
+The dashboard `pg-cloudops-postgres` shows CPU, connections, free storage and freeable memory.
+
+Screenshots are in `docs/`: `monitoring-dashboard.png`, `monitoring-alarms.png`, `monitoring-alert-email.png`, `cloudformation-stacks.png`.
+
+```bash
+aws cloudformation deploy --region eu-central-1 --template-file cloudformation/monitoring.yaml \
+  --stack-name cloudops-monitoring --parameter-overrides AlertEmail=<your-email>
+# confirm the subscription email from AWS, then test:
+aws cloudwatch set-alarm-state --region eu-central-1 --alarm-name pg-cloudops-cpu-high \
+  --state-value ALARM --state-reason "Test"
+```
 
 ## Deploy
 
@@ -98,6 +122,7 @@ psql "host=<db-endpoint> dbname=appdb user=dbadmin sslmode=require"
 Delete in this order and wait for each to finish:
 
 ```bash
+aws cloudformation delete-stack --region eu-central-1 --stack-name cloudops-monitoring
 aws cloudformation delete-stack --region eu-central-1 --stack-name cloudops-db
 aws cloudformation delete-stack --region eu-central-1 --stack-name cloudops-client
 aws cloudformation delete-stack --region eu-central-1 --stack-name cloudops-network
@@ -118,5 +143,4 @@ aws secretsmanager delete-secret --region eu-central-1 --secret-id pg-cloudops/d
 
 ## Next
 
-Deploy monitoring and test an alert, take a snapshot, simulate data loss, restore into a new instance and record the time, add a read-only database user and CloudTrail, then add screenshots to `docs/`.
-
+Take a snapshot, simulate data loss, restore into a new instance and record the time, add a read-only database user and CloudTrail, then add screenshots to `docs/`.
