@@ -1,0 +1,113 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Week 2 - RDS PostgreSQL in the private subnets. Not reachable from the internet,
+  encrypted at rest, SSL required, password generated and kept in Secrets Manager.
+  Uses the exports of network.yaml.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: pg-cloudops
+    Description: Must match the export prefix used in network.yaml (pg-cloudops).
+  DbInstanceClass:
+    Type: String
+    Default: db.t3.micro
+    Description: Smallest size, to keep cost low.
+  DbName:
+    Type: String
+    Default: appdb
+  DbUsername:
+    Type: String
+    Default: dbadmin
+  BackupRetentionDays:
+    Type: Number
+    Default: 1
+    MinValue: 0
+    MaxValue: 35
+    Description: >
+      1 day is enough for now. Raise to 7 in week 4 for the backup and restore test.
+      If your account shows a free-plan limit on backups, keep this at 1.
+
+Resources:
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private subnets for PostgreSQL
+      SubnetIds:
+        - Fn::ImportValue: !Sub "${ProjectName}-PrivateSubnetAId"
+        - Fn::ImportValue: !Sub "${ProjectName}-PrivateSubnetBId"
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-db-subnets"
+        - Key: Project
+          Value: !Ref ProjectName
+
+  DbParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Description: Security-minded PostgreSQL settings
+      Family: postgres17
+      Parameters:
+        rds.force_ssl: "1"
+        log_connections: "1"
+        log_disconnections: "1"
+        log_min_duration_statement: "1000"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  DbSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${ProjectName}/db-master"
+      Description: Master credentials for the PostgreSQL database
+      GenerateSecretString:
+        SecretStringTemplate: !Sub '{"username": "${DbUsername}"}'
+        GenerateStringKey: password
+        PasswordLength: 24
+        ExcludeCharacters: '"@/\'
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  Database:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      DBInstanceIdentifier: !Sub "${ProjectName}-postgres"
+      Engine: postgres
+      EngineVersion: "17.6"
+      DBInstanceClass: !Ref DbInstanceClass
+      AllocatedStorage: 20
+      StorageType: gp3
+      StorageEncrypted: true
+      DBName: !Ref DbName
+      MasterUsername: !Sub "{{resolve:secretsmanager:${DbSecret}:SecretString:username}}"
+      MasterUserPassword: !Sub "{{resolve:secretsmanager:${DbSecret}:SecretString:password}}"
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups:
+        - Fn::ImportValue: !Sub "${ProjectName}-DatabaseSecurityGroupId"
+      DBParameterGroupName: !Ref DbParameterGroup
+      PubliclyAccessible: false
+      MultiAZ: false
+      BackupRetentionPeriod: !Ref BackupRetentionDays
+      EnableCloudwatchLogsExports:
+        - postgresql
+      DeletionProtection: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-postgres"
+        - Key: Project
+          Value: !Ref ProjectName
+
+Outputs:
+  DbEndpoint:
+    Value: !GetAtt Database.Endpoint.Address
+    Export:
+      Name: !Sub "${ProjectName}-DbEndpoint"
+  DbSecretArn:
+    Value: !Ref DbSecret
+    Export:
+      Name: !Sub "${ProjectName}-DbSecretArn"
+

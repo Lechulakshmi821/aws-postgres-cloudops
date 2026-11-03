@@ -1,0 +1,68 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Small Linux test client in the public subnet. Connect with Systems Manager
+  Session Manager (no SSH key needed). Used to reach the private database.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: pg-cloudops
+    Description: Export prefix used in network.yaml.
+  InstanceType:
+    Type: String
+    Default: t3.micro
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Resources:
+  ClientRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: ReadDbSecret
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${ProjectName}/db-master-*"
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+
+  ClientProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref ClientRole
+
+  Client:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref ClientProfile
+      SubnetId:
+        Fn::ImportValue: !Sub "${ProjectName}-PublicSubnetId"
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub "${ProjectName}-ClientSecurityGroupId"
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-client"
+        - Key: Project
+          Value: !Ref ProjectName
+
+Outputs:
+  InstanceId:
+    Value: !Ref Client
+

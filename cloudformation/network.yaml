@@ -109,11 +109,26 @@ Resources:
 Outputs:
   VpcId:
     Value: !Ref Vpc
+    Export:
+      Name: pg-cloudops-VpcId
   PublicSubnetId:
     Value: !Ref PublicSubnet
+    Export:
+      Name: pg-cloudops-PublicSubnetId
   PrivateSubnetAId:
     Value: !Ref PrivateSubnetA
+    Export:
+      Name: pg-cloudops-PrivateSubnetAId
   PrivateSubnetBId:
     Value: !Ref PrivateSubnetB
+    Export:
+      Name: pg-cloudops-PrivateSubnetBId
+  ClientSecurityGroupId:
+    Value: !Ref ClientSecurityGroup
+    Export:
+      Name: pg-cloudops-ClientSecurityGroupId
   DatabaseSecurityGroupId:
     Value: !Ref DatabaseSecurityGroup
+    Export:
+      Name: pg-cloudops-DatabaseSecurityGroupId
+
